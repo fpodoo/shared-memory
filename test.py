@@ -14,9 +14,9 @@ s = "a"*5000
 def f():
     t = time.time()
     for i in range(500):
-        d['abc'] = s
+        d['a'*20+str(i)] = s
         for j in range(i):
-            a = d['abc']
+            a = d['a'*20+str(j)]
     print('    %.6f ms/opp' % ((time.time() - t) * 1000.0 / (500*251),))
 
 def lru_test():
@@ -46,19 +46,27 @@ if __name__ == '__main__':
     print('shared memory_lru v1 - 3 lists: key, prev, next')
     d = sm_lru_v1.lru_shared(4096)
     f()
+    del d
 
     print('shared memory_lru v2 - list of (key, prev, next)')
     d = sm_lru_v2.lru_shared(4096)
     f()
+    del d
 
     print('shared memory_lru v3 - list of (key, prev, next) - no LRU touch on __get__')
     d = sm_lru_v3.lru_shared(4096)
     f()
+    del d
 
     print('shared memory_lru v4 - data in sm - 10% lru touch')
     d = sm_lru_v4.lru_shared(4096)
     f()
+    del d
 
+    print('current: lock + 13% lru touch')
+    d = sm_lru.lru_shared(4096)
+    f()
+    del d
 
     print('Manager().dict - no LRU')
     manager = Manager()

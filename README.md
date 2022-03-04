@@ -23,7 +23,6 @@ redis
 
 # Todo:
 
-- locks
 - self.root in shared memory
 - better conflict handling in _del_index
 
