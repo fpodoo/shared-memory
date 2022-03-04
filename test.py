@@ -8,7 +8,7 @@ import sm_lru_v4
 import time
 import functools
 
-s = "a"*1000
+s = "a"*5000
 
 def f():
     t = time.time()
