@@ -4,10 +4,11 @@ import sm_lru
 import sm_lru_v1
 import sm_lru_v2
 import sm_lru_v3
+import sm_lru_v4
 import time
 import functools
 
-s = "a"*5000
+s = "a"*1000
 
 def f():
     t = time.time()
@@ -54,7 +55,7 @@ if __name__ == '__main__':
     f()
 
     print('shared memory_lru v3 - data in sm')
-    d = sm_lru.lru_shared(4096)
+    d = sm_lru_v4.lru_shared(4096)
     f()
 
 

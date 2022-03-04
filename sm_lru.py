@@ -49,6 +49,7 @@ class lru_shared(object):
             yield (hash_ + i) & self.mask
 
     def data_del(self, index):
+        print('* del', index)
         mem = SharedMemory(name='odoo_sm_%x' % (index,))
         mem.close()
         mem.unlink()
@@ -58,6 +59,7 @@ class lru_shared(object):
         return marshal.loads(mem.buf)
 
     def data_set(self, index, key, data):
+        print('* set', index)
         d = marshal.dumps((key, data))
         ld = len(d)
         mem = SharedMemory(create=True, name='odoo_sm_%x' % (index,), size=ld)
@@ -78,7 +80,7 @@ class lru_shared(object):
         index, key, prev, nxt, val = self.lookup(key_, hash(key_))
         if val is None:
             return None
-        # self.lru_touch(index, key, prev, nxt)
+        self.lru_touch(index, key, prev, nxt)
         return val
 
     def __setitem__(self, key, value):
@@ -86,6 +88,8 @@ class lru_shared(object):
         index, key_, prev, nxt, val = self.lookup(key, hash_)
         if val is None:
             self.length += 1
+        else:
+            self.data_del(index)
         self.lru_touch(index, hash_, None, None)
         self.data_set(index, key, value)
         while self.length > (self.size >> 1):
@@ -103,7 +107,7 @@ class lru_shared(object):
             self.mset(index, key, index, index)
             return True
 
-        if prev:
+        if prev is not None:
             self.ht[(nxt << HASHSIZE)+8:(nxt << HASHSIZE)+12] = prev.to_bytes(4, 'little', signed=False)
             self.ht[(prev << HASHSIZE)+12:(prev << HASHSIZE)+16] = nxt.to_bytes(4, 'little', signed=False)
         rkey, rprev, rnxt = self.mget(self.root)
