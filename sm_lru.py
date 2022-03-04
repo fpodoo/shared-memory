@@ -17,7 +17,7 @@ class lru_shared(object):
         self.ht[:size << HASHSIZE] = b'\x00' * (size << HASHSIZE)
 
         self.root = None
-        self.data = [None] * size
+        self.data = {}      # cache of shared memories
         self.length = 0
 
     def __del__(self):
@@ -49,18 +49,28 @@ class lru_shared(object):
             yield (hash_ + i) & self.mask
 
     def data_del(self, index):
-        mem = SharedMemory(name='odoo_sm_%x' % (index,))
+        name = 'odoo_sm_%x' % (index,)
+        mem = SharedMemory(name=name)
         mem.close()
         mem.unlink()
+        if name in self.data:
+            del self.data[name]
 
     def data_get(self, index):
-        mem = SharedMemory(name='odoo_sm_%x' % (index,))
+        name='odoo_sm_%x' % (index,)
+        if name in self.data:
+            mem = self.data[name]
+        else:
+            mem = SharedMemory(name=name)
+            self.data[name] = mem
         return marshal.loads(mem.buf)
 
     def data_set(self, index, key, data):
         d = marshal.dumps((key, data))
         ld = len(d)
-        mem = SharedMemory(create=True, name='odoo_sm_%x' % (index,), size=ld)
+        name = 'odoo_sm_%x' % (index,)
+        mem = SharedMemory(create=True, name=name, size=ld)
+        self.data[name] = mem
         mem.buf[0:ld] = d
 
     def lookup(self, key_, hash_):

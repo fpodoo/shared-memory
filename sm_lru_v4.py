@@ -3,6 +3,7 @@ from multiprocessing.shared_memory import SharedMemory
 import marshal
 import pudb
 import timeit
+import random
 
 HASHSIZE = 4           # hash: 8 bytes, prev: 4 bytes, next: 4 bytes = 16 bytes
 
@@ -17,7 +18,7 @@ class lru_shared(object):
         self.ht[:size << HASHSIZE] = b'\x00' * (size << HASHSIZE)
 
         self.root = None
-        self.data = [None] * size
+        self.data = {}      # cache of shared memories
         self.length = 0
 
     def __del__(self):
@@ -49,18 +50,28 @@ class lru_shared(object):
             yield (hash_ + i) & self.mask
 
     def data_del(self, index):
-        mem = SharedMemory(name='odoo_sm_%x' % (index,))
+        name = 'odoo_sm_%x' % (index,)
+        mem = SharedMemory(name=name)
         mem.close()
         mem.unlink()
+        if name in self.data:
+            del self.data[name]
 
     def data_get(self, index):
-        mem = SharedMemory(name='odoo_sm_%x' % (index,))
+        name='odoo_sm_%x' % (index,)
+        if name in self.data:
+            mem = self.data[name]
+        else:
+            mem = SharedMemory(name=name)
+            self.data[name] = mem
         return marshal.loads(mem.buf)
 
     def data_set(self, index, key, data):
         d = marshal.dumps((key, data))
         ld = len(d)
-        mem = SharedMemory(create=True, name='odoo_sm_%x' % (index,), size=ld)
+        name = 'odoo_sm_%x' % (index,)
+        mem = SharedMemory(create=True, name=name, size=ld)
+        self.data[name] = mem
         mem.buf[0:ld] = d
 
     def lookup(self, key_, hash_):
@@ -78,7 +89,8 @@ class lru_shared(object):
         index, key, prev, nxt, val = self.lookup(key_, hash(key_))
         if val is None:
             return None
-        self.lru_touch(index, key, prev, nxt)
+        if not random.randint(0,10):
+            self.lru_touch(index, key, prev, nxt)
         return val
 
     def __setitem__(self, key, value):
@@ -115,9 +127,9 @@ class lru_shared(object):
         self.ht[(rprev << HASHSIZE)+12:(rprev << HASHSIZE)+16] = bindex
         self.root = index
 
-    # NOTE: for a perfect dict, we should reallocate the hash that are after this element
-    #       because of a conflict, but should be before. Instead of managing that, it's
-    #       less costly to drop more keys, because it's an LRU.
+    # NOTE: delete the keys that are between this element, and the next free spot, having
+    #       an index lower or equal to the position we delete. (conflicts handling) or
+    #       move them by 1 position left
     def _del_index(self, index, key, prev, nxt):
         if prev == index:
             self.root = None
