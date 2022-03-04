@@ -115,9 +115,9 @@ class lru_shared(object):
         self.ht[(rprev << HASHSIZE)+12:(rprev << HASHSIZE)+16] = bindex
         self.root = index
 
-    # NOTE: for a perfect dict, we should reallocate the hash that are after this element
-    #       because of a conflict, but should be before. Instead of managing that, it's
-    #       less costly to drop more keys, because it's an LRU.
+    # NOTE: delete the keys that are between this element, and the next free spot, having
+    #       an index lower or equal to the position we delete. (conflicts handling) or
+    #       move them by 1 position left
     def _del_index(self, index, key, prev, nxt):
         if prev == index:
             self.root = None
