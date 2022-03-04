@@ -49,7 +49,6 @@ class lru_shared(object):
             yield (hash_ + i) & self.mask
 
     def data_del(self, index):
-        print('* del', index)
         mem = SharedMemory(name='odoo_sm_%x' % (index,))
         mem.close()
         mem.unlink()
@@ -59,7 +58,6 @@ class lru_shared(object):
         return marshal.loads(mem.buf)
 
     def data_set(self, index, key, data):
-        print('* set', index)
         d = marshal.dumps((key, data))
         ld = len(d)
         mem = SharedMemory(create=True, name='odoo_sm_%x' % (index,), size=ld)
