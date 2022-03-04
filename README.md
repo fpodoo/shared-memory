@@ -17,6 +17,9 @@ shared memory_lru v3 - data in sm
     0.033305 ms/opp
 Manager().dict - no LRU
     0.031112 ms/opp
+redis
+    0.049201 ms/opp
+
 ```
 
 # Todo:
