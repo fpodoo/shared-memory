@@ -7,6 +7,7 @@ import sm_lru_v3
 import sm_lru_v4
 import time
 import functools
+import redis
 
 s = "a"*5000
 
@@ -65,4 +66,9 @@ if __name__ == '__main__':
     p = Process(target=f)
     p.start()
     p.join()
+
+    print('redis')
+    d = redis.Redis()
+    f()
+
 
