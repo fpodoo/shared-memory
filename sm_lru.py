@@ -1,4 +1,5 @@
-from multiprocessing.managers import SharedMemoryManager
+#from multiprocessing.managers import SharedMemoryManager
+from multiprocessing.shared_memory import SharedMemory
 import marshal
 import pudb
 import timeit
@@ -10,10 +11,8 @@ class lru_shared(object):
         assert size>0 and (size & (size-1) == 0), "LRU size must be an exponantiel of 2"
         self.mask = size-1
         self.size = size
-        self.smm = SharedMemoryManager()
-        self.smm.start()
 
-        self.htm = self.smm.SharedMemory(size=size << HASHSIZE)
+        self.htm = SharedMemory(size=size << HASHSIZE, name="odoo_sm_cache", create=True)
         self.ht = self.htm.buf
         self.ht[:size << HASHSIZE] = b'\x00' * (size << HASHSIZE)
 
@@ -22,7 +21,16 @@ class lru_shared(object):
         self.length = 0
 
     def __del__(self):
-        self.smm.shutdown()
+        if self.root is not None:
+            node = self.root
+            self.data_del(node)
+            _, _, node = self.mget(node)
+            while node != self.root:
+                self.data_del(node)
+                _, _, node = self.mget(node)
+
+        self.htm.close()
+        self.htm.unlink()
 
     def mset(self, index, key, prev, nxt):
         key.to_bytes
@@ -40,13 +48,28 @@ class lru_shared(object):
         for i in range(self.size):
             yield (hash_ + i) & self.mask
 
+    def data_del(self, index):
+        mem = SharedMemory(name='odoo_sm_%x' % (index,))
+        mem.close()
+        mem.unlink()
+
+    def data_get(self, index):
+        mem = SharedMemory(name='odoo_sm_%x' % (index,))
+        return marshal.loads(mem.buf)
+
+    def data_set(self, index, key, data):
+        d = marshal.dumps((key, data))
+        ld = len(d)
+        mem = SharedMemory(create=True, name='odoo_sm_%x' % (index,), size=ld)
+        mem.buf[0:ld] = d
+
     def lookup(self, key_, hash_):
         for index in self.index_get(hash_):
             key, prev, nxt = self.mget(index)
             if not key:
                 return (index, key, prev, nxt, None)
             if key == hash_:
-                (key_full, val) = marshal.loads(self.data[index])
+                (key_full, val) = self.data_get(index)
                 if key_full == key_:
                     return (index, key, prev, nxt, val)
         raise "memory full means bug"
@@ -64,7 +87,7 @@ class lru_shared(object):
         if val is None:
             self.length += 1
         self.lru_touch(index, hash_, None, None)
-        self.data[index] = marshal.dumps((key, value))
+        self.data_set(index, key, value)
         while self.length > (self.size >> 1):
             self.lru_pop()
 
@@ -101,6 +124,7 @@ class lru_shared(object):
             self.ht[(prev << HASHSIZE)+12:(prev << HASHSIZE)+16] = nxt.to_bytes(4, 'little', signed=False)
             if self.root == index:
                 self.root = nxt
+        self.data_del(index)
         self.mset(index, 0, 0, 0)
         self.length -= 1
 
@@ -117,7 +141,7 @@ class lru_shared(object):
         result = []
         while True:
             key, prev, nxt = self.mget(node)
-            result.append(str(node)+': '+marshal.loads(self.data[node])[1])
+            result.append(str(node)+': '+self.data_get(node)[1])
             node = nxt
             if node == self.root:
                 return ' > '.join(result) + ', len: ' + str(self.length)
@@ -138,3 +162,4 @@ if __name__=="__main__":
     print(lru)
     lru["have"] = "as"
     print(lru)
+    del lru

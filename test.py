@@ -1,5 +1,6 @@
 
 from multiprocessing import Process, Manager
+import sm_lru
 import sm_lru_v1
 import sm_lru_v2
 import sm_lru_v3
@@ -50,6 +51,10 @@ if __name__ == '__main__':
 
     print('shared memory_lru v2 - list of (key, prev, next) - no LRU touch on __get__')
     d = sm_lru_v3.lru_shared(4096)
+    f()
+
+    print('shared memory_lru v3 - data in sm')
+    d = sm_lru.lru_shared(4096)
     f()
 
 
