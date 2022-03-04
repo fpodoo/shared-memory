@@ -76,7 +76,7 @@ class lru_shared(object):
         name = 'odoo_sm_%x' % (index,)
         mem = SharedMemory(create=True, name=name, size=ld)
         self.data[name] = mem
-        mem.buf[0:ld] = d
+        mem.buf[:ld] = d
 
     def lookup(self, key_, hash_):
         for index in self.index_get(hash_):
