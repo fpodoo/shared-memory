@@ -3,6 +3,7 @@ from multiprocessing.shared_memory import SharedMemory
 from multiprocessing import Lock
 import marshal
 import pudb
+import struct
 import timeit
 import random
 
@@ -38,16 +39,12 @@ class lru_shared(object):
         self.htm.unlink()
 
     def mset(self, index, key, prev, nxt):
-        key.to_bytes
-        data = key.to_bytes(8, 'little', signed=True) + prev.to_bytes(4, 'little', signed=False) + nxt.to_bytes(4, 'little', signed=False)
+        data = struct.pack('<qII', key, prev, nxt)
         self.ht[index << HASHSIZE:(index+1) << HASHSIZE] = data
 
     def mget(self, index):
         data = bytes(self.ht[index << HASHSIZE:(index+1) << HASHSIZE])
-        key =  int.from_bytes(data[:8], 'little', signed=True)
-        prev = int.from_bytes(data[8:12], 'little', signed=False)
-        nxt =  int.from_bytes(data[12:16], 'little', signed=False)
-        return (key, prev, nxt)
+        return struct.unpack('<qII', data)
 
     def index_get(self, hash_):
         for i in range(self.size):
@@ -129,11 +126,11 @@ class lru_shared(object):
             return True
 
         if prev is not None:
-            self.ht[(nxt << HASHSIZE)+8:(nxt << HASHSIZE)+12] = prev.to_bytes(4, 'little', signed=False)
-            self.ht[(prev << HASHSIZE)+12:(prev << HASHSIZE)+16] = nxt.to_bytes(4, 'little', signed=False)
+            self.ht[(nxt << HASHSIZE)+8:(nxt << HASHSIZE)+12] = struct.pack('<I', prev)
+            self.ht[(prev << HASHSIZE)+12:(prev << HASHSIZE)+16] = struct.pack('<I', nxt)
         rkey, rprev, rnxt = self.mget(self.root)
         self.mset(index, key, rprev, self.root)
-        bindex = index.to_bytes(4, 'little', signed=False)
+        bindex = struct.pack('<I', index)
         self.ht[(self.root << HASHSIZE)+8:(self.root << HASHSIZE)+12] = bindex
         self.ht[(rprev << HASHSIZE)+12:(rprev << HASHSIZE)+16] = bindex
         self.root = index
@@ -145,8 +142,8 @@ class lru_shared(object):
         if prev == index:
             self.root = None
         else:
-            self.ht[(nxt << HASHSIZE)+8:(nxt << HASHSIZE)+12] = prev.to_bytes(4, 'little', signed=False)
-            self.ht[(prev << HASHSIZE)+12:(prev << HASHSIZE)+16] = nxt.to_bytes(4, 'little', signed=False)
+            self.ht[(nxt << HASHSIZE)+8:(nxt << HASHSIZE)+12] = struct.pack('<I', prev)
+            self.ht[(prev << HASHSIZE)+12:(prev << HASHSIZE)+16] = struct.pack('<I', nxt)
             if self.root == index:
                 self.root = nxt
         self.data_del(index)
