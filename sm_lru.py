@@ -29,10 +29,10 @@ class lru_shared(object):
         self.nxt.fill(0)
 
         self.data = {}      # local cache of shared memories index
-        self.touch = 1
+        self.touch = 1      # used to touch the lru periodically, not 100% of the time
 
-        self.root = -1
-        self.length = 0
+        self.root = -1      # stored at end of self.prev
+        self.length = 0     # stored at end of self.nxt
 
     root = property(lambda self: self.prev[-1], lambda self, x: self.prev.__setitem__(-1, x))
     length = property(lambda self: self.nxt[-1], lambda self, x: self.nxt.__setitem__(-1, x))

@@ -26,6 +26,7 @@ redis
 # Todo:
 
 - better conflict handling in _del_index
+- put data in a single large shared memory block, instead of creating a sm per data
 
 # Random notes
 
