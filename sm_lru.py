@@ -1,12 +1,11 @@
 #from multiprocessing.managers import SharedMemoryManager
 from multiprocessing.shared_memory import SharedMemory
 from multiprocessing import Lock
+import numpy
 import marshal
 import pudb
 import timeit
 import random
-
-HASHSIZE = 4           # hash: 8 bytes, prev: 4 bytes, next: 4 bytes = 16 bytes
 
 write_lock  = Lock()
 
@@ -16,17 +15,30 @@ class lru_shared(object):
         self.mask = size-1
         self.size = size
 
-        self.htm = SharedMemory(size=size << HASHSIZE, name="odoo_sm_cache", create=True)
-        self.ht = self.htm.buf
-        self.ht[:size << HASHSIZE] = b'\x00' * (size << HASHSIZE)
+        self.salt = '%x' % (random.randint(0, 2**32-1),)
+        self.htm = SharedMemory(size=size << 3, name="odoo_hash_"+self.salt, create=True)
+        self.ht = numpy.ndarray((size,), dtype=numpy.float64, buffer=self.htm.buf)
+        self.ht.fill(0)
 
-        self.root = None
-        self.data = {}      # cache of shared memories
-        self.length = 0
+        self.prevm = SharedMemory(size=(size+1) << 2, name="odoo_prev_"+self.salt, create=True)
+        self.prev = numpy.ndarray((size+1,), dtype=numpy.int32, buffer=self.prevm.buf)
+        self.prev.fill(0)
+
+        self.nxtm = SharedMemory(size=(size+1) << 2, name="odoo_nxt_"+self.salt, create=True)
+        self.nxt = numpy.ndarray((size+1,), dtype=numpy.int32, buffer=self.nxtm.buf)
+        self.nxt.fill(0)
+
+        self.data = {}      # local cache of shared memories index
         self.touch = 1
 
+        self.root = -1
+        self.length = 0
+
+    root = property(lambda self: self.prev[-1], lambda self, x: self.prev.__setitem__(-1, x))
+    length = property(lambda self: self.nxt[-1], lambda self, x: self.nxt.__setitem__(-1, x))
+
     def __del__(self):
-        if self.root is not None:
+        if self.root >= 0:
             node = self.root
             self.data_del(node)
             _, _, node = self.mget(node)
@@ -36,25 +48,25 @@ class lru_shared(object):
 
         self.htm.close()
         self.htm.unlink()
+        self.prevm.close()
+        self.prevm.unlink()
+        self.nxtm.close()
+        self.nxtm.unlink()
 
     def mset(self, index, key, prev, nxt):
-        key.to_bytes
-        data = key.to_bytes(8, 'little', signed=True) + prev.to_bytes(4, 'little', signed=False) + nxt.to_bytes(4, 'little', signed=False)
-        self.ht[index << HASHSIZE:(index+1) << HASHSIZE] = data
+        self.prev[index] = prev
+        self.nxt[index] = nxt
+        self.ht[index] = key
 
     def mget(self, index):
-        data = bytes(self.ht[index << HASHSIZE:(index+1) << HASHSIZE])
-        key =  int.from_bytes(data[:8], 'little', signed=True)
-        prev = int.from_bytes(data[8:12], 'little', signed=False)
-        nxt =  int.from_bytes(data[12:16], 'little', signed=False)
-        return (key, prev, nxt)
+        return (self.ht[index], self.prev[index], self.nxt[index])
 
     def index_get(self, hash_):
         for i in range(self.size):
             yield (hash_ + i) & self.mask
 
     def data_del(self, index):
-        name = 'odoo_sm_%x' % (index,)
+        name = 'odoo_sm_%s_%x' % (self.salt, index)
         mem = SharedMemory(name=name)
         mem.close()
         mem.unlink()
@@ -62,7 +74,7 @@ class lru_shared(object):
             del self.data[name]
 
     def data_get(self, index):
-        name='odoo_sm_%x' % (index,)
+        name='odoo_sm_%s_%x' % (self.salt, index)
         if name in self.data:
             mem = self.data[name]
         else:
@@ -73,7 +85,7 @@ class lru_shared(object):
     def data_set(self, index, key, data):
         d = marshal.dumps((key, data))
         ld = len(d)
-        name = 'odoo_sm_%x' % (index,)
+        name = 'odoo_sm_%s_%x' % (self.salt, index)
         mem = SharedMemory(create=True, name=name, size=ld)
         self.data[name] = mem
         mem.buf[:ld] = d
@@ -96,7 +108,7 @@ class lru_shared(object):
             return None
         write_lock.release()
         self.touch = (self.touch + 1) & 7
-        if not self.touch:
+        if not self.touch:   # lru touch every 8th reads: not sure about this optim?
             if write_lock.acquire(block=False):
                 self.lru_touch(index, key, prev, nxt)
             write_lock.release()
@@ -110,6 +122,7 @@ class lru_shared(object):
             self.length += 1
         else:
             self.data_del(index)
+        self.ht[index] = hash_
         self.lru_touch(index, hash_, None, None)
         self.data_set(index, key, value)
         while self.length > (self.size >> 1):
@@ -117,25 +130,27 @@ class lru_shared(object):
         write_lock.release()
 
     def lru_pop(self):
-        if self.root is None:
+        if self.root == -1:
             return False
         _, index, _ = self.mget(self.root)
         self._del_index(index, *self.mget(index))
 
     def lru_touch(self, index, key, prev, nxt):
-        if self.root is None:
+        if self.root == -1:
             self.root = index
             self.mset(index, key, index, index)
             return True
 
         if prev is not None:
-            self.ht[(nxt << HASHSIZE)+8:(nxt << HASHSIZE)+12] = prev.to_bytes(4, 'little', signed=False)
-            self.ht[(prev << HASHSIZE)+12:(prev << HASHSIZE)+16] = nxt.to_bytes(4, 'little', signed=False)
-        rkey, rprev, rnxt = self.mget(self.root)
-        self.mset(index, key, rprev, self.root)
-        bindex = index.to_bytes(4, 'little', signed=False)
-        self.ht[(self.root << HASHSIZE)+8:(self.root << HASHSIZE)+12] = bindex
-        self.ht[(rprev << HASHSIZE)+12:(rprev << HASHSIZE)+16] = bindex
+            self.prev[nxt] = prev
+            self.nxt[prev] = nxt
+
+        rprev = self.prev[self.root]
+        self.prev[index] = rprev
+        self.nxt[index] = self.root
+
+        self.prev[self.root] = index
+        self.nxt[rprev] = index
         self.root = index
 
     # NOTE: delete the keys that are between this element, and the next free spot, having
@@ -145,8 +160,8 @@ class lru_shared(object):
         if prev == index:
             self.root = None
         else:
-            self.ht[(nxt << HASHSIZE)+8:(nxt << HASHSIZE)+12] = prev.to_bytes(4, 'little', signed=False)
-            self.ht[(prev << HASHSIZE)+12:(prev << HASHSIZE)+16] = nxt.to_bytes(4, 'little', signed=False)
+            self.prev[nxt] = prev
+            self.nxt[prev] = nxt
             if self.root == index:
                 self.root = nxt
         self.data_del(index)
@@ -159,7 +174,7 @@ class lru_shared(object):
         self._del_index(index, key, prev, nxt)
 
     def __str__(self):
-        if self.root is None:
+        if self.root == -1:
             return '[]'
 
         node = self.root

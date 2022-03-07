@@ -1,11 +1,15 @@
 #from multiprocessing.managers import SharedMemoryManager
 from multiprocessing.shared_memory import SharedMemory
+from multiprocessing import Lock
 import marshal
 import pudb
 import timeit
 import random
 
 HASHSIZE = 4           # hash: 8 bytes, prev: 4 bytes, next: 4 bytes = 16 bytes
+SALT = '%x' % (random.randint(0, 2**32-1),)
+
+write_lock  = Lock()
 
 class lru_shared(object):
     def __init__(self, size=4096):
@@ -13,13 +17,14 @@ class lru_shared(object):
         self.mask = size-1
         self.size = size
 
-        self.htm = SharedMemory(size=size << HASHSIZE, name="odoo_sm_cache", create=True)
+        self.htm = SharedMemory(size=size << HASHSIZE, name="odoo_cache_"+SALT, create=True)
         self.ht = self.htm.buf
         self.ht[:size << HASHSIZE] = b'\x00' * (size << HASHSIZE)
 
         self.root = None
         self.data = {}      # cache of shared memories
         self.length = 0
+        self.touch = 1
 
     def __del__(self):
         if self.root is not None:
@@ -72,7 +77,7 @@ class lru_shared(object):
         name = 'odoo_sm_%x' % (index,)
         mem = SharedMemory(create=True, name=name, size=ld)
         self.data[name] = mem
-        mem.buf[0:ld] = d
+        mem.buf[:ld] = d
 
     def lookup(self, key_, hash_):
         for index in self.index_get(hash_):
@@ -86,15 +91,21 @@ class lru_shared(object):
         raise "memory full means bug"
 
     def __getitem__(self, key_):
+        write_lock.acquire(block=False)
         index, key, prev, nxt, val = self.lookup(key_, hash(key_))
         if val is None:
             return None
-        if not random.randint(0,10):
-            self.lru_touch(index, key, prev, nxt)
+        write_lock.release()
+        self.touch = (self.touch + 1) & 7
+        if not self.touch:
+            if write_lock.acquire(block=False):
+                self.lru_touch(index, key, prev, nxt)
+            write_lock.release()
         return val
 
     def __setitem__(self, key, value):
         hash_ = hash(key)
+        write_lock.acquire()
         index, key_, prev, nxt, val = self.lookup(key, hash_)
         if val is None:
             self.length += 1
@@ -104,6 +115,7 @@ class lru_shared(object):
         self.data_set(index, key, value)
         while self.length > (self.size >> 1):
             self.lru_pop()
+        write_lock.release()
 
     def lru_pop(self):
         if self.root is None:

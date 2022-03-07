@@ -58,12 +58,12 @@ if __name__ == '__main__':
     f()
     del d
 
-    print('shared memory_lru v4 - data in sm - 10% lru touch')
+    print('shared memory_lru v4 - lock - data in sm - 13% lru touch')
     d = sm_lru_v4.lru_shared(4096)
     f()
     del d
 
-    print('current: lock + 13% lru touch')
+    print('current: numpy')
     d = sm_lru.lru_shared(4096)
     f()
     del d
