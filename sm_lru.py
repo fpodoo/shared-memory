@@ -130,13 +130,15 @@ class lru_shared(object):
         write_lock.release()
 
     def lru_pop(self):
-        if self.root == -1:
+        root = self.root
+        if root == -1:
             return False
-        _, index, _ = self.mget(self.root)
+        _, index, _ = self.mget(root)
         self._del_index(index, *self.mget(index))
 
     def lru_touch(self, index, key, prev, nxt):
-        if self.root == -1:
+        root = self.root
+        if root == -1:
             self.root = index
             self.mset(index, key, index, index)
             return True
@@ -145,11 +147,11 @@ class lru_shared(object):
             self.prev[nxt] = prev
             self.nxt[prev] = nxt
 
-        rprev = self.prev[self.root]
+        rprev = self.prev[root]
         self.prev[index] = rprev
-        self.nxt[index] = self.root
+        self.nxt[index] = root
 
-        self.prev[self.root] = index
+        self.prev[root] = index
         self.nxt[rprev] = index
         self.root = index
 
