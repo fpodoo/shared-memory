@@ -21,7 +21,7 @@ class lru_shared(object):
         data = [
             ('head', numpy.int32, (3,)), ('ht', numpy.float64, (size,)),
             ('prev', numpy.int32, (size,)), ('nxt', numpy.int32, (size,)),
-            ('data_idx', numpy.uint64, (size,2)), ('data_free', numpy.uint64, (size,2))
+            ('data_idx', numpy.uint64, (size,2)), ('data_free', numpy.uint64, (size + 9,2))
         ]
         start = 0
         for (name, dtype, sz) in data:
@@ -66,7 +66,7 @@ class lru_shared(object):
         size = last + 1
         self.free_len = size
 
-        if not self.touch:
+        if size>=self.size or not self.touch:
             # TODO: optimize this code
             mems = self.data_free[self.data_free[:size, 0].argsort()]
             pos = 0
@@ -119,11 +119,11 @@ class lru_shared(object):
     def __getitem__(self, key_):
         write_lock.acquire(block=False)
         index, key, prev, nxt, val = self.lookup(key_, hash(key_))
+        write_lock.release()
         if val is None:
             return None
-        write_lock.release()
         self.touch = (self.touch + 1) & 7
-        if not self.touch:   # lru touch every 8th reads: not sure about this optim?
+        if True or not self.touch:   # lru touch every 8th reads: not sure about this optim?
             if write_lock.acquire(block=False):
                 self.lru_touch(index, key, prev, nxt)
             write_lock.release()
