@@ -26,7 +26,7 @@ redis
 # Todo:
 
 - better conflict handling in _del_index
-- handle not enough memory exceptions
+- handle not enough memory exceptions by poping from LRU
 
 # Random notes
 
