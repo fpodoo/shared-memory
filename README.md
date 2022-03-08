@@ -4,29 +4,28 @@ Python Shared Memory LRU - POC Test. Performance:
 
 ```
 local
-    0.000241 ms/opp
+    0.000242 ms/opp
 functools.lru_cache
-    0.000266 ms/opp
+    0.000268 ms/opp
 shared memory_lru v1 - 3 lists: key, prev, next
-    0.007839 ms/opp
+    0.008065 ms/opp
 shared memory_lru v2 - list of (key, prev, next)
-    0.005929 ms/opp
+    0.005850 ms/opp
 shared memory_lru v3 - list of (key, prev, next) - no LRU touch on __get__
-    0.002760 ms/opp
+    0.002774 ms/opp
 shared memory_lru v4 - lock - data in sm - 13% lru touch
-    0.004553 ms/opp
-current: numpy + root & length in shared memory
-    0.004934 ms/opp
+    0.004620 ms/opp
+current: numpy + single large shared memory
+    0.004500 ms/opp
 Manager().dict - no LRU
-    0.030575 ms/opp
+    0.031983 ms/opp
 redis
-    0.049428 ms/opp
+    0.048989 ms/opp
 ```
 
 # Todo:
 
 - better conflict handling in _del_index
-- put data in a single large shared memory block, instead of creating a sm per data
 
 # Random notes
 

@@ -63,7 +63,7 @@ if __name__ == '__main__':
     f()
     del d
 
-    print('current: numpy + root & length in shared memory')
+    print('current: numpy + single large shared memory')
     d = sm_lru.lru_shared(4096)
     f()
     del d
