@@ -1,13 +1,11 @@
 
 from multiprocessing import Process, Manager
 import sm_lru
-import sm_lru_v1
-import sm_lru_v2
-import sm_lru_v3
-import sm_lru_v4
 import time
 import functools
 import redis
+from pymemcache.client import base
+
 
 s = "a"*5000
 
@@ -43,26 +41,6 @@ if __name__ == '__main__':
     d = {}
     lru_test()
 
-    print('shared memory_lru v1 - 3 lists: key, prev, next')
-    d = sm_lru_v1.lru_shared(4096)
-    f()
-    del d
-
-    print('shared memory_lru v2 - list of (key, prev, next)')
-    d = sm_lru_v2.lru_shared(4096)
-    f()
-    del d
-
-    print('shared memory_lru v3 - list of (key, prev, next) - no LRU touch on __get__')
-    d = sm_lru_v3.lru_shared(4096)
-    f()
-    del d
-
-    print('shared memory_lru v4 - lock - data in sm - 13% lru touch')
-    d = sm_lru_v4.lru_shared(4096)
-    f()
-    del d
-
     print('current: numpy + single large shared memory')
     d = sm_lru.lru_shared(4096)
     f()
@@ -79,4 +57,7 @@ if __name__ == '__main__':
     d = redis.Redis()
     f()
 
+    print('memcache')
+    d = base.Client('/tmp/sock')
+    f()
 
