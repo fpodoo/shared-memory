@@ -1,5 +1,5 @@
 
-from multiprocessing import Process, Manager
+from multiprocessing import Process, Manager, Pool
 import sm_lru
 import time
 import functools
@@ -16,6 +16,7 @@ def f():
         for j in range(i):
             a = d['a'*20+str(j)]
     print('    %.6f ms/opp' % ((time.time() - t) * 1000.0 / (500*251),))
+    return True
 
 def lru_test():
     d = {}
@@ -43,7 +44,10 @@ if __name__ == '__main__':
 
     print('current: numpy + single large shared memory')
     d = sm_lru.lru_shared(4096)
-    f()
+    with Pool(8) as p:
+        p.starmap(f, [()]*8)
+        p.close()
+        p.join()
     del d
 
     print('Manager().dict - no LRU')
@@ -55,9 +59,15 @@ if __name__ == '__main__':
 
     print('redis')
     d = redis.Redis()
-    f()
+    with Pool(8) as p:
+        p.starmap(f, [()]*8)
+        p.close()
+        p.join()
 
     print('memcache')
     d = base.Client('/tmp/sock')
-    f()
+    with Pool(8) as p:
+        p.starmap(f, [()]*8)
+        p.close()
+        p.join()
 

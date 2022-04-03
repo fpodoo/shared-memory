@@ -13,7 +13,7 @@
 # Imports
 
 from contextlib import contextmanager
-from threading  import Lock
+from multiprocessing  import Lock, Value
 
 
 # _______________________________________________________________________
@@ -38,23 +38,25 @@ class RWLock(object):
 
         self.w_lock = Lock()
         self.num_r_lock = Lock()
-        self.num_r = 0
+        self.num_r = Value('i', 0, lock=False)
 
     # ___________________________________________________________________
     # Reading methods.
 
     def r_acquire(self):
         self.num_r_lock.acquire()
-        self.num_r += 1
-        if self.num_r == 1:
+        count = self.num_r.value + 1
+        self.num_r.value = count
+        if count == 1:
             self.w_lock.acquire()
         self.num_r_lock.release()
 
     def r_release(self):
-        assert self.num_r > 0
+        assert self.num_r.value > 0
         self.num_r_lock.acquire()
-        self.num_r -= 1
-        if self.num_r == 0:
+        count = self.num_r.value - 1
+        self.num_r.value = count
+        if count == 0:
             self.w_lock.release()
         self.num_r_lock.release()
 
