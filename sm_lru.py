@@ -1,9 +1,9 @@
 #from multiprocessing.managers import SharedMemoryManager
 from multiprocessing.shared_memory import SharedMemory
-from multiprocessing import Lock
 import numpy
 import marshal
 import functools
+from read_write_lock import RWLock
 
 
 class lru_shared(object):
@@ -27,7 +27,7 @@ class lru_shared(object):
 
         self.data = self.sm.buf[end: size<<12]
         self.data_free[0] = [0, (size<<12) - end]
-        self.lock  = Lock()
+        self.lock = RWLock()
 
         self.touch = 1        # used to touch the lru periodically, not 100% of the time
         self.root = -1        # stored at end of self.prev
@@ -114,32 +114,29 @@ class lru_shared(object):
         raise "memory full means bug"
 
     def __getitem__(self, key_):
-        self.lock.acquire(block=False)
-        index, key, prev, nxt, val = self.lookup(key_, hash(key_))
-        self.lock.release()
+        with self.lock.r_locked():
+            index, key, prev, nxt, val = self.lookup(key_, hash(key_))
         if val is None:
             return None
         self.touch = (self.touch + 1) & 7
         if not self.touch:   # lru touch every 8th reads: not sure about this optim?
-            if self.lock.acquire(block=False):
+            with self.lock.w_locked():
                 self.lru_touch(index, key, prev, nxt)
-            self.lock.release()
         return val
 
     def __setitem__(self, key, value):
         hash_ = hash(key)
-        self.lock.acquire()
-        index, key_, prev, nxt, val = self.lookup(key, hash_)
-        if val is None:
-            self.length += 1
-        else:
-            self.mfree(index)
-        self.ht[index] = hash_
-        self.lru_touch(index, hash_, None, None)
-        self._malloc(index, (key, value))
-        while self.length > (self.size >> 1):
-            self.lru_pop()
-        self.lock.release()
+        with self.lock.w_locked():
+            index, key_, prev, nxt, val = self.lookup(key, hash_)
+            if val is None:
+                self.length += 1
+            else:
+                self._free(index)
+            self.ht[index] = hash_
+            self.lru_touch(index, hash_, None, None)
+            self._malloc(index, (key, value))
+            while self.length > (self.size >> 1):
+                self.lru_pop()
 
     def lru_pop(self):
         root = self.root
