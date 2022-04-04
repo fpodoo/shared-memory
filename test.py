@@ -42,7 +42,12 @@ if __name__ == '__main__':
     d = {}
     lru_test()
 
-    print('current: numpy + single large shared memory')
+    print('shared memory: 1 process')
+    d = sm_lru.lru_shared(4096)
+    f()
+    del d
+
+    print('shared memory: 8 processes')
     d = sm_lru.lru_shared(4096)
     with Pool(8) as p:
         p.starmap(f, [()]*8)
@@ -57,8 +62,11 @@ if __name__ == '__main__':
     p.start()
     p.join()
 
-    print('redis')
+    print('redis: 1 process')
     d = redis.Redis()
+    f()
+
+    print('redis: 8 processes')
     with Pool(8) as p:
         p.starmap(f, [()]*8)
         p.close()

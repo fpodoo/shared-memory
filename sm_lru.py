@@ -119,9 +119,9 @@ class lru_shared(object):
         if val is None:
             return None
         self.touch = (self.touch + 1) & 7
-        # if not self.touch:   # lru touch every 8th reads: not sure about this optim?
-        #     with self.lock.w_locked():
-        #         self.lru_touch(index, key, prev, nxt)
+        if not self.touch:   # lru touch every 8th reads: not sure about this optim?
+            with self.lock.w_locked():
+                self.lru_touch(index, key, prev, nxt)
         return val
 
     def __setitem__(self, key, value):
